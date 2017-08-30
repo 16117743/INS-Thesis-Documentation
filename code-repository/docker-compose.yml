@@ -1,0 +1,61 @@
+version: "2"
+services:
+  haproxy:
+    build: ./haproxy
+    image: registry.ng.bluemix.net/tomspace2/haproxy-image1
+    container_name: ha_name
+    depends_on:
+    - mosca_srv1
+    ports:
+    - "80:80"
+    - "1883:1883"
+    networks:
+    - mynetwork
+    links:
+    - "mosca_srv1"
+    - "mosca_srv2"
+
+    environment:
+      BACKENDS: "mosca_srv1"
+      DNS_ENABLED: "true"
+
+  mosca_srv1:
+    build: ./mosca2
+    image: registry.ng.bluemix.net/tomspace2/mosca-image1
+    depends_on:
+    - redis
+    networks:
+      mynetwork:
+        aliases:
+          - mosca_srv1
+    links:
+    - "redis"
+
+  mosca_srv2:
+    image: registry.ng.bluemix.net/tomspace2/mosca-image1
+    depends_on:
+    - redis
+    networks:
+      mynetwork:
+        aliases:
+          - mosca_srv2
+    links:
+    - "redis"
+
+  influxdb:
+    build: ./influxdb
+    image: registry.ng.bluemix.net/tomspace2/influxdb-image1
+    networks:
+      mynetwork:
+        aliases:
+          - influxdb
+  redis:
+    build: ./redis
+    image: registry.ng.bluemix.net/tomspace2/redis-image1
+    networks:
+      mynetwork:
+        aliases:
+          - redis
+
+networks:
+  mynetwork:

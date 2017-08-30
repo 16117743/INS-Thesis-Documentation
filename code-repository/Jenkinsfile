@@ -1,0 +1,115 @@
+pipeline 
+{
+
+
+
+    agent any
+
+	environment {
+		IBM_CLOUD_DEVOPS_CREDS = credentials('bm-creds')
+		IBM_CLOUD_DEVOPS_ORG = 'tom1'
+		IBM_CLOUD_DEVOPS_APP_NAME = 'us-nodered-app'
+		IBM_CLOUD_DEVOPS_TOOLCHAIN_ID = '5a81013a-9b2d-4e17-a53b-1a908a213914'
+		IBM_CLOUD_DEVOPS_WEBHOOK_URL = 'https://jenkins:deb89eb9-8061-4db6-b43a-1a6eb8362b27:71020b52-212e-4184-b1c9-0f5072768803@devops-api.ng.bluemix.net/v1/toolint/messaging/webhook/publish'
+	    }
+
+    stages 
+    {
+        stage('Build') 
+	{
+		environment 
+		{
+			// get git commit from Jenkins
+			GIT_COMMIT = sh(returnStdout: true, script: 'git rev-parse HEAD').trim()
+			GIT_BRANCH = 'master'
+			GIT_REPO = 'git@git.ng.bluemix.net:tflynn/us-pipeline-repo.git'
+	    	}
+		steps 
+		{
+
+			sh 'bx api https://api.ng.bluemix.net'
+
+			echo "logging in..."
+			sh 'bx login -u $IBM_CLOUD_DEVOPS_CREDS_USR -p $IBM_CLOUD_DEVOPS_CREDS_PSW -o $IBM_CLOUD_DEVOPS_ORG -s space-us'
+			echo "logged in!"
+
+			sh '''
+				#sudo bx ic init
+                                #sudo bx cr login
+	
+				export DOCKER_HOST=tcp://containers-api.ng.bluemix.net:8443
+				export DOCKER_CERT_PATH=/var/lib/jenkins/.ice/certs/containers-api.ng.bluemix.net/f31facf5-5535-4975-810a-12ea8757a499
+				export DOCKER_TLS_VERIFY=1
+
+				#docker-compose build
+			'''
+	
+		}
+		post 
+		{
+		        success 
+			{
+		            publishBuildRecord gitBranch: "${GIT_BRANCH}", gitCommit: "${GIT_COMMIT}", gitRepo: "${GIT_REPO}",  result:"SUCCESS"
+		        }
+		        failure 
+			{
+		            publishBuildRecord gitBranch: "${GIT_BRANCH}", gitCommit: "${GIT_COMMIT}", gitRepo: "${GIT_REPO}", result:"FAIL"
+		        }
+		 }
+    	 }
+        stage('testing') 
+	{
+              steps {
+                echo 'Performing integration tests....'
+               }
+            post 
+		{
+		        success 
+			{
+		            echo 'integration passed all tests'
+		        }
+		        failure 
+			{
+		            echo 'integration failed to pass all tests'
+		        }
+		 }
+        }
+        stage('Deploy') 
+	{
+            steps {
+       
+                echo 'Deploying....'
+                sh 'bx api https://api.ng.bluemix.net'
+
+			echo "logging in..."
+			sh 'bx login -u $IBM_CLOUD_DEVOPS_CREDS_USR -p $IBM_CLOUD_DEVOPS_CREDS_PSW -o $IBM_CLOUD_DEVOPS_ORG -s space-us'
+			echo "logged in!"
+
+			sh '''
+				sudo bx ic init
+                                sudo bx cr login
+	
+				export DOCKER_HOST=tcp://containers-api.ng.bluemix.net:8443
+				export DOCKER_CERT_PATH=/var/lib/jenkins/.ice/certs/containers-api.ng.bluemix.net/f31facf5-5535-4975-810a-12ea8757a499
+				export DOCKER_TLS_VERIFY=1
+
+				COMPOSE_HTTP_TIMEOUT=200 docker-compose -p projectName up --force-recreate -d
+                		bx ic ip-bind 169.46.159.224 ha_name
+			'''
+                
+            }
+            post 
+		{
+		        success 
+			{
+		            echo 'successful deployment!'
+		        }
+		        failure 
+			{
+		            echo 'failed deployment!'
+		        }
+		 }
+        }
+    }
+}
+
